@@ -12,13 +12,13 @@ from datetime import date, timedelta
 random.seed(42)
 
 PRODUCTS = [
-    "Sky Glass/Sky Q",
-    "Sky Broadband",
-    "Sky Mobile",
-    "Sky Cinema",
-    "Sky Sports",
-    "NOW TV",
-    "Sky Protect",
+    "Netflix",
+    "Disney+",
+    "HBO Max",
+    "Apple TV+",
+    "Amazon Prime Video",
+    "Paramount+",
+    "Hulu",
 ]
 
 REGIONS = ["England", "Scotland", "Wales", "NI"]
@@ -37,26 +37,26 @@ CHURN_REASONS = [
 
 CONTRACT_TYPES = ["in-contract", "OOC", "rolling-monthly"]
 
-# MRR ranges per product (£/month)
+# MRR ranges per product ($/month)
 PRODUCT_MRR = {
-    "Sky Glass/Sky Q":  (35, 75),
-    "Sky Broadband":    (25, 55),
-    "Sky Mobile":       (15, 45),
-    "Sky Cinema":       (10, 20),
-    "Sky Sports":       (18, 30),
-    "NOW TV":           (5,  15),
-    "Sky Protect":      (8,  25),
+    "Netflix":             (10, 23),
+    "Disney+":             (8,  14),
+    "HBO Max":             (10, 16),
+    "Apple TV+":           (9,  10),
+    "Amazon Prime Video":  (9,  15),
+    "Paramount+":          (6,  12),
+    "Hulu":                (8,  18),
 }
 
 # Monthly base churn probability per product
 PRODUCT_BASE_CHURN = {
-    "Sky Glass/Sky Q":  0.012,
-    "Sky Broadband":    0.014,
-    "Sky Mobile":       0.016,
-    "Sky Cinema":       0.022,
-    "Sky Sports":       0.025,
-    "NOW TV":           0.045,
-    "Sky Protect":      0.010,
+    "Netflix":             0.020,
+    "Disney+":             0.028,
+    "HBO Max":             0.025,
+    "Apple TV+":           0.035,
+    "Amazon Prime Video":  0.018,
+    "Paramount+":          0.042,
+    "Hulu":                0.030,
 }
 
 SIM_START = date(2024, 1, 1)
@@ -127,8 +127,8 @@ for sub_id in range(1, N_SUBSCRIBERS + 1):
     # Acquisition spread across simulation window (earlier cohorts more common)
     acq_date = random_date(SIM_START, date(2026, 1, 1))
 
-    # Contract type: rolling-monthly more common for NOW TV
-    if product == "NOW TV":
+    # Streaming-only services are almost always month-to-month
+    if product in ("Netflix", "Disney+", "Apple TV+", "Paramount+", "Hulu"):
         contract_type = weighted_choice(CONTRACT_TYPES, [0.05, 0.10, 0.85])
     else:
         contract_type = weighted_choice(CONTRACT_TYPES, [0.55, 0.25, 0.20])
@@ -201,7 +201,7 @@ for sub_id in range(1, N_SUBSCRIBERS + 1):
     propensity_score = None
     if status == "churned":
         # Reason distribution varies by product
-        if product in ("Sky Cinema", "Sky Sports", "NOW TV"):
+        if product in ("Disney+", "Apple TV+", "Paramount+"):
             reason_weights = [0.25, 0.20, 0.15, 0.10, 0.30]  # not_using heavy
         else:
             reason_weights = [0.35, 0.25, 0.20, 0.10, 0.10]  # price heavy
