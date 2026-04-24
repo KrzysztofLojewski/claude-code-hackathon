@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sky UK — Subscription Churn Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sky-red:    #e4002b;
+      --sky-dark:   #0d1117;
+      --sky-panel:  #161b22;
+      --sky-border: #30363d;
+      --sky-text:   #e6edf3;
+      --sky-muted:  #8b949e;
+      --sky-blue:   #58a6ff;
+      --sky-green:  #3fb950;
+      --sky-orange: #d29922;
+      --sky-purple: #bc8cff;
+    }
+
+    body {
+      background: var(--sky-dark);
+      color: var(--sky-text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 28px;
+      border-bottom: 1px solid var(--sky-border);
+      background: var(--sky-panel);
+      position: sticky; top: 0; z-index: 100;
+    }
+    header .brand { display: flex; align-items: center; gap: 12px; }
+    header .logo {
+      width: 36px; height: 36px; border-radius: 8px;
+      background: var(--sky-red);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 18px; color: #fff; letter-spacing: -1px;
+    }
+    header h1 { font-size: 17px; font-weight: 600; }
+    header .subtitle { font-size: 12px; color: var(--sky-muted); margin-top: 2px; }
+
+    .controls { display: flex; align-items: center; gap: 12px; }
+    .controls select {
+      background: var(--sky-dark); color: var(--sky-text);
+      border: 1px solid var(--sky-border); border-radius: 6px;
+      padding: 6px 10px; font-size: 13px; cursor: pointer;
+    }
+    .def-badge {
+      background: #1f2937; border: 1px solid var(--sky-border);
+      border-radius: 20px; padding: 4px 10px;
+      font-size: 11px; color: var(--sky-muted);
+    }
+    .def-badge span { color: var(--sky-green); font-weight: 600; }
+
+    /* ── Layout ── */
+    main { padding: 24px 28px; display: flex; flex-direction: column; gap: 24px; }
+
+    /* ── KPI strip ── */
+    .kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 14px;
+    }
+    .kpi-card {
+      background: var(--sky-panel);
+      border: 1px solid var(--sky-border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .kpi-card .label { font-size: 11px; color: var(--sky-muted); text-transform: uppercase; letter-spacing: .5px; }
+    .kpi-card .value { font-size: 26px; font-weight: 700; margin-top: 6px; }
+    .kpi-card .delta { font-size: 11px; color: var(--sky-muted); margin-top: 4px; }
+    .kpi-card.danger .value  { color: var(--sky-red); }
+    .kpi-card.success .value { color: var(--sky-green); }
+    .kpi-card.warn .value    { color: var(--sky-orange); }
+    .kpi-card.info .value    { color: var(--sky-blue); }
+
+    /* ── Chart grid ── */
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+    .chart-grid .wide { grid-column: span 2; }
+
+    .panel {
+      background: var(--sky-panel);
+      border: 1px solid var(--sky-border);
+      border-radius: 10px;
+      padding: 20px;
+    }
+    .panel h2 {
+      font-size: 13px; font-weight: 600; margin-bottom: 4px;
+      text-transform: uppercase; letter-spacing: .5px; color: var(--sky-muted);
+    }
+    .panel .chart-wrap { position: relative; height: 260px; margin-top: 14px; }
+    .panel .chart-wrap.tall { height: 340px; }
+
+    /* ── Funnel ── */
+    .funnel { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+    .funnel-step {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .funnel-bar-wrap { flex: 1; background: var(--sky-border); border-radius: 4px; height: 32px; overflow: hidden; }
+    .funnel-bar { height: 100%; border-radius: 4px; display: flex; align-items: center; padding: 0 10px; font-size: 12px; font-weight: 600; transition: width .6s ease; }
+    .funnel-label { width: 100px; font-size: 12px; color: var(--sky-muted); text-align: right; }
+    .funnel-count { width: 70px; font-size: 13px; font-weight: 600; }
+
+    /* ── Cohort heatmap table ── */
+    .heatmap-wrap { overflow-x: auto; margin-top: 14px; }
+    table.heatmap {
+      border-collapse: collapse; font-size: 11px; min-width: 100%;
+    }
+    table.heatmap th, table.heatmap td {
+      border: 1px solid var(--sky-border); padding: 4px 7px; text-align: center; white-space: nowrap;
+    }
+    table.heatmap thead th { background: #1c2128; color: var(--sky-muted); }
+    table.heatmap tbody th { background: #1c2128; color: var(--sky-muted); font-weight: 500; }
+
+    /* ── Waterfall ── */
+    .waterfall { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+    .wf-row { display: flex; align-items: center; gap: 10px; }
+    .wf-label { width: 160px; font-size: 12px; color: var(--sky-muted); }
+    .wf-bar-wrap { flex: 1; }
+    .wf-bar { height: 28px; border-radius: 4px; display: flex; align-items: center; padding: 0 10px; font-size: 12px; font-weight: 600; }
+    .wf-val { width: 90px; text-align: right; font-size: 13px; font-weight: 600; }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 28px; height: 28px; border: 3px solid var(--sky-border);
+      border-top-color: var(--sky-blue); border-radius: 50%;
+      animation: spin .7s linear infinite; margin: 60px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .chart-grid { grid-template-columns: 1fr; }
+      .chart-grid .wide { grid-column: span 1; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo">S</div>
+    <div>
+      <h1>Sky UK — Subscription Churn Dashboard</h1>
+      <div class="subtitle">Single source of truth &middot; All metrics tagged with churn definition version</div>
+    </div>
+  </div>
+  <div class="controls">
+    <select id="periodSelect"></select>
+    <div class="def-badge">definition: <span id="defVersion">—</span></div>
+  </div>
+</header>
+
+<main>
+  <!-- KPI cards -->
+  <div class="kpi-strip" id="kpiStrip"><div class="spinner"></div></div>
+
+  <!-- Row 1 -->
+  <div class="chart-grid">
+    <div class="panel wide">
+      <h2>1 &middot; Churn Rate Trend (rolling 13 months)</h2>
+      <div class="chart-wrap">
+        <canvas id="churnTrendChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2 -->
+  <div class="chart-grid">
+    <div class="panel">
+      <h2>3 &middot; OOC Exposure — Next 12 Months</h2>
+      <div class="chart-wrap">
+        <canvas id="oocChart"></canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>4 &middot; Churn by Tenure</h2>
+      <div class="chart-wrap">
+        <canvas id="tenureChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3 -->
+  <div class="chart-grid">
+    <div class="panel">
+      <h2>5 &middot; MRR Waterfall</h2>
+      <div class="waterfall" id="waterfallPanel"><div class="spinner"></div></div>
+    </div>
+    <div class="panel">
+      <h2>6 &middot; At-Risk Subscriber Funnel</h2>
+      <div class="funnel" id="funnelPanel"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <!-- Row 4 -->
+  <div class="chart-grid">
+    <div class="panel">
+      <h2>7 &middot; Churn Reason Pareto</h2>
+      <div class="chart-wrap">
+        <canvas id="reasonChart"></canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>8 &middot; Propensity Score Distribution</h2>
+      <div class="chart-wrap">
+        <canvas id="propChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 5: cohort heatmap (wide) -->
+  <div class="panel">
+    <h2>2 &middot; Cohort Survival Heatmap (%  still active)</h2>
+    <div class="heatmap-wrap" id="cohortHeatmap"><div class="spinner"></div></div>
+  </div>
+
+  <!-- Row 6: breakdown by product -->
+  <div class="panel">
+    <h2>Churn rate by product — <span id="breakdownPeriod"></span></h2>
+    <div class="chart-wrap">
+      <canvas id="productBreakdownChart"></canvas>
+    </div>
+  </div>
+</main>
+
+<script>
+/* ─────────────────────────────────────────────
+   Config
+───────────────────────────────────────────── */
+const API = 'http://localhost:8000';
+
+const PRODUCT_COLORS = {
+  'Sky Glass/Sky Q': '#58a6ff',
+  'Sky Broadband':   '#3fb950',
+  'Sky Mobile':      '#d29922',
+  'Sky Cinema':      '#bc8cff',
+  'Sky Sports':      '#e4002b',
+  'NOW TV':          '#f78166',
+  'Sky Protect':     '#56d364',
+};
+
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#30363d';
+
+/* ─────────────────────────────────────────────
+   Helpers
+───────────────────────────────────────────── */
+async function api(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error(`API error ${r.status} at ${path}`);
+  return r.json();
+}
+
+function fmt(n, decimals = 0) {
+  if (n == null) return '—';
+  return Number(n).toLocaleString('en-GB', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function heatColor(pct) {
+  // green (100) → yellow (50) → red (0)
+  const g = Math.round((pct / 100) * 255);
+  const r = Math.round((1 - pct / 100) * 255);
+  return `rgba(${r},${g},50,0.75)`;
+}
+
+function destroyIfExists(id) {
+  const existing = Chart.getChart(id);
+  if (existing) existing.destroy();
+}
+
+/* ─────────────────────────────────────────────
+   Period selector
+───────────────────────────────────────────── */
+const periodSelect = document.getElementById('periodSelect');
+// Build options from 2024-01 to 2026-03
+(function buildPeriods() {
+  const options = [];
+  for (let y = 2024; y <= 2026; y++) {
+    const maxM = (y === 2026) ? 3 : 12;
+    for (let m = 1; m <= maxM; m++) {
+      const label = new Date(y, m - 1, 1).toLocaleString('en-GB', { month: 'short', year: 'numeric' });
+      const val = `${y}-${String(m).padStart(2,'0')}`;
+      options.push({ label, val });
+    }
+  }
+  options.reverse();
+  options.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o.val; opt.textContent = o.label;
+    periodSelect.appendChild(opt);
+  });
+  periodSelect.value = '2026-03';
+})();
+
+periodSelect.addEventListener('change', () => loadPeriodDependentCharts());
+
+function selectedPeriod() {
+  const [y, m] = periodSelect.value.split('-').map(Number);
+  return { year: y, month: m };
+}
+
+/* ─────────────────────────────────────────────
+   KPI Cards
+───────────────────────────────────────────── */
+async function loadKPIs() {
+  const { year, month } = selectedPeriod();
+  const d = await api(`/kpis/summary?year=${year}&month=${month}`);
+  document.getElementById('defVersion').textContent = d.definition_version;
+
+  const cards = [
+    { label: 'Active Subscribers', value: fmt(d.total_active_subscribers), cls: 'info' },
+    { label: 'Gross Adds',         value: fmt(d.gross_adds),               cls: 'success' },
+    { label: 'Gross Churn',        value: fmt(d.gross_churn),              cls: 'danger' },
+    { label: 'Net Adds',           value: fmt(d.net_adds),                 cls: d.net_adds >= 0 ? 'success' : 'danger' },
+    { label: 'Churn Rate %',       value: `${fmt(d.churn_rate_pct, 2)}%`,  cls: 'warn' },
+    { label: 'MRR',                value: `£${fmt(d.mrr)}`,               cls: 'info' },
+    { label: 'MRR Churned',        value: `£${fmt(d.mrr_churned)}`,       cls: 'danger' },
+    { label: 'MRR Churn %',        value: `${fmt(d.mrr_churn_pct, 2)}%`,  cls: 'warn' },
+  ];
+
+  document.getElementById('kpiStrip').innerHTML = cards.map(c => `
+    <div class="kpi-card ${c.cls}">
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value}</div>
+      <div class="delta">${d.period}</div>
+    </div>`).join('');
+}
+
+/* ─────────────────────────────────────────────
+   Chart 1 — Churn Rate Trend
+───────────────────────────────────────────── */
+async function loadChurnTrend() {
+  const { year, month } = selectedPeriod();
+  const d = await api(`/charts/churn-rate-trend?end_year=${year}&end_month=${month}&months=13`);
+
+  const labels  = d.series.map(r => r.period);
+  const rates   = d.series.map(r => r.churn_rate_pct);
+  const benchmark = rates.map(() => 2.5); // industry benchmark placeholder
+
+  destroyIfExists('churnTrendChart');
+  new Chart(document.getElementById('churnTrendChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Churn Rate %',
+          data: rates,
+          borderColor: '#e4002b',
+          backgroundColor: 'rgba(228,0,43,.10)',
+          fill: true,
+          tension: 0.35,
+          pointRadius: 4,
+        },
+        {
+          label: 'Industry Benchmark',
+          data: benchmark,
+          borderColor: '#8b949e',
+          borderDash: [6, 4],
+          pointRadius: 0,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        y: { title: { display: true, text: 'Churn Rate %' }, beginAtZero: true },
+        x: { title: { display: true, text: 'Month' } },
+      },
+    },
+  });
+}
+
+/* ─────────────────────────────────────────────
+   Chart 3 — OOC Exposure
+───────────────────────────────────────────── */
+async function loadOOC() {
+  const d = await api('/charts/ooc-exposure?months_ahead=12');
+  const labels   = d.series.map(r => r.period);
+  const products = [...new Set(d.series.flatMap(r => Object.keys(r.by_product)))].sort();
+
+  destroyIfExists('oocChart');
+  new Chart(document.getElementById('oocChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: products.map(p => ({
+        label: p,
+        data: d.series.map(r => r.by_product[p] || 0),
+        backgroundColor: PRODUCT_COLORS[p] || '#58a6ff',
+      })),
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        x: { stacked: true },
+        y: { stacked: true, title: { display: true, text: 'Subscribers' } },
+      },
+    },
+  });
+}
+
+/* ─────────────────────────────────────────────
+   Chart 4 — Churn by Tenure
+───────────────────────────────────────────── */
+async function loadTenure() {
+  const d = await api('/charts/churn-by-tenure');
+  const labels = d.histogram.map(r => r.tenure);
+  const values = d.histogram.map(r => r.churn_count);
+
+  destroyIfExists('tenureChart');
+  new Chart(document.getElementById('tenureChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Churn events',
+        data: values,
+        backgroundColor: values.map((_, i) => {
+          const m = parseInt(labels[i]);
+          // Highlight bimodal peaks: <3m and 12-14m
+          if (m < 3 || (m >= 12 && m <= 14)) return 'rgba(228,0,43,0.8)';
+          return 'rgba(88,166,255,0.6)';
+        }),
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { title: { display: true, text: 'Months since activation' } },
+        y: { title: { display: true, text: 'Churn events' } },
+      },
+    },
+  });
+}
+
+/* ─────────────────────────────────────────────
+   Chart 5 — MRR Waterfall (custom render)
+───────────────────────────────────────────── */
+async function loadWaterfall() {
+  const { year, month } = selectedPeriod();
+  const d = await api(`/charts/mrr-waterfall?year=${year}&month=${month}`);
+
+  const steps = [
+    { label: 'Opening MRR',    value: d.mrr_start,       neutral: true },
+    { label: '+ Gross Adds',   value: d.mrr_gross_adds,  pos: true },
+    { label: '− Churned MRR',  value: d.mrr_churned,     neg: true },
+    { label: '+ Upgrades',     value: d.mrr_upgrades,    pos: true },
+    { label: '− Downgrades',   value: d.mrr_downgrades,  neg: true },
+    { label: 'Closing MRR',    value: d.mrr_end,         neutral: true },
+  ];
+
+  const max = Math.max(...steps.map(s => Math.abs(s.value)));
+
+  document.getElementById('waterfallPanel').innerHTML = steps.map(s => {
+    const pct = Math.round(Math.abs(s.value) / max * 100);
+    const color = s.neutral ? '#58a6ff' : s.pos ? '#3fb950' : '#e4002b';
+    const sign  = s.pos ? '+' : '';
+    return `
+      <div class="wf-row">
+        <div class="wf-label">${s.label}</div>
+        <div class="wf-bar-wrap">
+          <div class="wf-bar" style="width:${pct}%;background:${color}20;border-left:3px solid ${color};">
+            &nbsp;
+          </div>
+        </div>
+        <div class="wf-val" style="color:${color}">${sign}£${fmt(Math.abs(s.value))}</div>
+      </div>`;
+  }).join('');
+}
+
+/* ─────────────────────────────────────────────
+   Chart 6 — At-Risk Funnel
+───────────────────────────────────────────── */
+async function loadFunnel() {
+  const d = await api('/charts/at-risk-funnel');
+
+  const steps = [
+    { label: 'OOC Subscribers', value: d.total_ooc_subscribers, color: '#58a6ff' },
+    { label: 'Contacted',       value: d.contacted,             color: '#3fb950' },
+    { label: 'Engaged',         value: d.engaged,               color: '#d29922' },
+    { label: 'Saved',           value: d.saved,                 color: '#56d364' },
+    { label: 'Churned (est.)',  value: d.churned_estimate,      color: '#e4002b' },
+  ];
+
+  const max = steps[0].value;
+  document.getElementById('funnelPanel').innerHTML = `
+    ${steps.map(s => {
+      const pct = Math.round(s.value / max * 100);
+      return `
+        <div class="funnel-step">
+          <div class="funnel-label">${s.label}</div>
+          <div class="funnel-bar-wrap">
+            <div class="funnel-bar" style="width:${pct}%;background:${s.color}30;border-left:3px solid ${s.color};color:${s.color}">
+              ${pct}%
+            </div>
+          </div>
+          <div class="funnel-count">${fmt(s.value)}</div>
+        </div>`;
+    }).join('')}
+    <div style="margin-top:8px;font-size:11px;color:#8b949e">
+      Save rate: <strong style="color:#3fb950">${d.save_rate_pct}%</strong>
+      &nbsp;&middot;&nbsp; ${d.note}
+    </div>`;
+}
+
+/* ─────────────────────────────────────────────
+   Chart 7 — Churn Reason Pareto
+───────────────────────────────────────────── */
+async function loadReasons() {
+  const d = await api('/charts/churn-reasons');
+  const sorted = [...d.reasons].sort((a, b) => b.pct - a.pct);
+
+  destroyIfExists('reasonChart');
+  new Chart(document.getElementById('reasonChart'), {
+    type: 'bar',
+    data: {
+      labels: sorted.map(r => r.reason.replace(/_/g, ' ')),
+      datasets: [{
+        label: '% of churn',
+        data: sorted.map(r => r.pct),
+        backgroundColor: [
+          '#e4002b','#d29922','#58a6ff','#3fb950','#bc8cff',
+        ],
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { title: { display: true, text: '% of churn volume' } },
+      },
+    },
+  });
+}
+
+/* ─────────────────────────────────────────────
+   Chart 8 — Propensity Distribution
+───────────────────────────────────────────── */
+async function loadPropensity() {
+  const d = await api('/charts/propensity-distribution?bins=10');
+
+  destroyIfExists('propChart');
+  new Chart(document.getElementById('propChart'), {
+    type: 'bar',
+    data: {
+      labels: d.bins.map(b => b.score_band),
+      datasets: [{
+        label: 'Subscribers',
+        data: d.bins.map(b => b.subscriber_count),
+        backgroundColor: d.bins.map(b =>
+          b.high_risk ? 'rgba(228,0,43,0.75)' : 'rgba(88,166,255,0.55)'
+        ),
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterLabel: ctx => `MRR at risk: £${fmt(d.bins[ctx.dataIndex].mrr_at_risk)}`
+          }
+        }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Propensity Score' } },
+        y: { title: { display: true, text: 'Subscriber Count' } },
+      },
+    },
+  });
+}
+
+/* ─────────────────────────────────────────────
+   Chart 2 — Cohort Survival Heatmap
+───────────────────────────────────────────── */
+async function loadCohortHeatmap() {
+  const d = await api('/charts/cohort-survival?max_months=12');
+  const cohorts = d.cohorts.slice(-16); // last 16 cohorts for readability
+  const maxOffset = Math.max(...cohorts.flatMap(c => c.survival.map(s => s.month_offset)));
+
+  const headers = ['Cohort', 'Size', ...Array.from({ length: maxOffset + 1 }, (_, i) => `M${i}`)];
+
+  const bodyRows = cohorts.map(c => {
+    const survivalMap = Object.fromEntries(c.survival.map(s => [s.month_offset, s.retention_pct]));
+    const cells = Array.from({ length: maxOffset + 1 }, (_, i) => {
+      const pct = survivalMap[i];
+      if (pct == null) return '<td style="background:#1c2128;color:#444">—</td>';
+      return `<td style="background:${heatColor(pct)};color:#fff">${pct}%</td>`;
+    });
+    return `<tr><th>${c.cohort}</th><td>${c.cohort_size}</td>${cells.join('')}</tr>`;
+  });
+
+  document.getElementById('cohortHeatmap').innerHTML = `
+    <table class="heatmap">
+      <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+      <tbody>${bodyRows.join('')}</tbody>
+    </table>`;
+}
+
+/* ─────────────────────────────────────────────
+   Product breakdown bar chart
+───────────────────────────────────────────── */
+async function loadProductBreakdown() {
+  const { year, month } = selectedPeriod();
+  document.getElementById('breakdownPeriod').textContent = `${year}-${String(month).padStart(2,'0')}`;
+  const d = await api(`/breakdown/product?year=${year}&month=${month}`);
+
+  destroyIfExists('productBreakdownChart');
+  new Chart(document.getElementById('productBreakdownChart'), {
+    type: 'bar',
+    data: {
+      labels: d.rows.map(r => r.product),
+      datasets: [{
+        label: 'Churn Rate %',
+        data: d.rows.map(r => r.churn_rate_pct),
+        backgroundColor: d.rows.map(r => PRODUCT_COLORS[r.product] || '#58a6ff'),
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { title: { display: true, text: 'Churn Rate %' }, beginAtZero: true },
+      },
+    },
+  });
+}
+
+/* ─────────────────────────────────────────────
+   Load everything
+───────────────────────────────────────────── */
+function loadPeriodDependentCharts() {
+  loadKPIs();
+  loadChurnTrend();
+  loadWaterfall();
+  loadProductBreakdown();
+}
+
+async function init() {
+  // Period-independent charts load once
+  await Promise.allSettled([
+    loadOOC(),
+    loadTenure(),
+    loadFunnel(),
+    loadReasons(),
+    loadPropensity(),
+    loadCohortHeatmap(),
+  ]);
+  // Period-dependent charts load based on selector
+  loadPeriodDependentCharts();
+}
+
+init();
+</script>
+</body>
+</html>
